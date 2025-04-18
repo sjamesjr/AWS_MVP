@@ -1,6 +1,6 @@
 provider "aws" {
-  region = "us-east-1"
-  profile = "AdministratorAccess-985539787837"
+  profile = var.profile_default
+  region  = "us-east-1"
 }
 
 resource "aws_vpc" "main" {
@@ -41,7 +41,7 @@ resource "aws_security_group" "ec2_sg" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [var.my_ip]
   }
 
   ingress {
@@ -130,7 +130,7 @@ resource "aws_db_instance" "db" {
   allocated_storage  = 20
   db_name            = "mydb"
   username           = "admin"
-  password           = "MySecurePass123"
+  password        = var.db_password
   skip_final_snapshot = true
   publicly_accessible = false
   vpc_security_group_ids = [aws_security_group.ec2_sg.id]
