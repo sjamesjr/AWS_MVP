@@ -19,13 +19,30 @@ resource "aws_route_table" "public_rt" {
   }
 }
 
+resource "aws_route_table" "private_rt" {
+  vpc_id = aws_vpc.main.id
+}
+
 resource "aws_route_table_association" "public_rt_assoc" {
   count          = 2
   subnet_id      = aws_subnet.subnet[count.index].id
   route_table_id = aws_route_table.public_rt.id
 }
 
+resource "aws_route_table_association" "private_rt_assoc" {
+  count          = 2
+  subnet_id      = aws_subnet.private_subnet[count.index].id
+  route_table_id = aws_route_table.private_rt.id
+}
+
 resource "aws_subnet" "subnet" {
+  count             = 2
+  cidr_block        = "10.0.${count.index}.0/24"
+  vpc_id            = aws_vpc.main.id
+  availability_zone = element(["us-east-1a", "us-east-1b"], count.index)
+}
+
+resource "aws_subnet" "private_subnet" {
   count             = 2
   cidr_block        = "10.0.${count.index}.0/24"
   vpc_id            = aws_vpc.main.id
@@ -59,9 +76,48 @@ resource "aws_security_group" "ec2_sg" {
   }
 }
 
+resource "aws_security_group" "RDS" {
+  name        = "RDS"
+  description = "Allow inbound HTTP and SSH"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    from_port   = 3306
+    to_port     = 3306
+    protocol    = "tcp"
+    security_groups = [aws_security_group.ec2_sg.id]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_security_group" "ALB" {
+  name        = "ALB"
+  description = "Allow inbound HTTP and SSH"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
 resource "aws_launch_template" "ec2_template" {
   name_prefix   = "web-template"
-  image_id      = "ami-0df8c184d5f6ae949" # Amazon Linux 2 (Free Tier)
+  image_id      = "ami-05ffe3c48a9991133" # Amazon Linux 23 (Free Tier)
   instance_type = "t2.micro"
 
   network_interfaces {
@@ -101,7 +157,7 @@ resource "aws_lb" "alb" {
   internal           = false
   load_balancer_type = "application"
   subnets            = aws_subnet.subnet[*].id
-  security_groups    = [aws_security_group.ec2_sg.id]
+  security_groups    = [aws_security_group.ALB.id]
 }
 
 resource "aws_lb_target_group" "tg" {
@@ -133,13 +189,13 @@ resource "aws_db_instance" "db" {
   password        = var.db_password
   skip_final_snapshot = true
   publicly_accessible = false
-  vpc_security_group_ids = [aws_security_group.ec2_sg.id]
+  vpc_security_group_ids = [aws_security_group.RDS.id]
   db_subnet_group_name   = aws_db_subnet_group.db_subnet.name
 }
 
 resource "aws_db_subnet_group" "db_subnet" {
   name       = "db-subnet-group"
-  subnet_ids = aws_subnet.subnet[*].id
+  subnet_ids = aws_subnet.private_subnet[*].id
 }
 
 resource "aws_cloudwatch_metric_alarm" "ec2_cost_alert" {
