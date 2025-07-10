@@ -44,7 +44,7 @@ resource "aws_subnet" "subnet" {
 
 resource "aws_subnet" "private_subnet" {
   count             = 2
-  cidr_block        = "10.0.${count.index}.0/24"
+  cidr_block        = "10.0.${count.index + 2}.0/24" # Offset by +2
   vpc_id            = aws_vpc.main.id
   availability_zone = element(["us-east-1a", "us-east-1b"], count.index)
 }
